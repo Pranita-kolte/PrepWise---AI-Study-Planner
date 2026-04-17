@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | AI Study Planner</title>
+  <link rel="stylesheet" href="./css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dashboard-body">
+
+  <nav class="navbar glass-panel">
+    <div class="brand">PrepWise</div>
+    <div class="user-controls">
+      <span id="user-greeting">Welcome, User</span>
+      <button id="logout-btn" class="btn btn-outline">Logout</button>
+    </div>
+  </nav>
+  
+  <div class="dashboard-layout">
+    
+    <!-- AI Task Input Section -->
+    <aside class="sidebar glass-panel">
+      <h2>Add New Study Task</h2>
+      <p class="text-muted">Use natural language.</p>
+      <form id="ai-task-form">
+        <textarea id="ai-task-input" rows="4" placeholder="e.g. I need to study Math for 5 hours. The difficulty is 4 out of 5 and my deadline is in 7 days." required></textarea>
+        <button type="submit" class="btn btn-secondary w-full" id="ai-task-submit">Generate Task (AI)</button>
+      </form>
+      <div id="ai-task-error" class="error-msg text-sm mt-2"></div>
+      <div id="ai-task-success" class="success-msg text-sm mt-2"></div>
+    </aside>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard-content">
+      
+      <div class="stats-grid">
+        <div class="stat-card glass-panel">
+          <h3>Total Tasks</h3>
+          <p id="stat-total" class="stat-value">0</p>
+        </div>
+        <div class="stat-card glass-panel">
+          <h3>Hours Planned</h3>
+          <p id="stat-hours" class="stat-value">0</p>
+        </div>
+      </div>
+
+      <div class="charts-section glass-panel">
+        <h2>Progress Overview</h2>
+        <div class="chart-container">
+          <canvas id="difficultyChart"></canvas>
+        </div>
+      </div>
+
+      <div class="tasks-section glass-panel">
+        <h2>Upcoming Deadlines & Priorities</h2>
+        <div id="tasks-list" class="tasks-list">
+          <!-- Tasks dynamically populated here -->
+          <div class="text-muted text-center py-4">Loading tasks...</div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <div class="blob blob-1 dashboard-blob"></div>
+  <div class="blob blob-2 dashboard-blob"></div>
+
+  <script src="./js/api.js"></script>
+  <script src="./js/dashboard.js"></script>
+</body>
+</html>
