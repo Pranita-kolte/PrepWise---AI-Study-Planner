@@ -44,6 +44,13 @@ const api = {
       body: JSON.stringify(userData)
     })
   },
+  user: {
+    getSettings: () => fetchWrapper('/auth/settings'),
+    updateSettings: (settings) => fetchWrapper('/auth/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings)
+    })
+  },
   tasks: {
     getAll: () => fetchWrapper('/study/tasks'),
     create: (taskData) => fetchWrapper('/study/tasks', {
@@ -56,6 +63,9 @@ const api = {
     parseAI: (text) => fetchWrapper('/study/parse_task', {
       method: 'POST',
       body: JSON.stringify({ text })
+    }),
+    toggleActivity: (taskId, activityId) => fetchWrapper(`/study/tasks/${taskId}/activity/${activityId}`, {
+      method: 'PUT'
     })
   }
 };

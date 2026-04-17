@@ -4,7 +4,13 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }
+  password: { type: String, required: true },
+  blockedTimes: [{
+    day: { type: String }, // e.g. "Monday", "Tuesday", or "Everyday"
+    start: { type: String }, // e.g. "08:00"
+    end: { type: String },    // e.g. "15:00"
+    type: { type: String, enum: ['Class', 'Sleep', 'Work', 'Other'], default: 'Other' }
+  }]
 }, { timestamps: true });
 
 // Hash password before saving

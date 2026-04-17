@@ -13,8 +13,10 @@ const taskSchema = new mongoose.Schema({
   completed: { type: Boolean, default: false },
   schedule: [{
     time: { type: String },
-    activity: { type: String }
+    activity: { type: String },
+    completed: { type: Boolean, default: false }
   }],
+  priority_score: { type: Number, default: 0 },
   tips: [{ type: String }]
 }, { timestamps: true });
 

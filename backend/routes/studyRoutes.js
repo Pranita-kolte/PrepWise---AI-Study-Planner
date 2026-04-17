@@ -1,7 +1,9 @@
 const express = require('express');
 const Task = require('../models/Task');
+const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 const { Groq } = require('groq-sdk');
+const { generateDeterministicSchedule } = require('../utils/schedulerEngine');
 
 const router = express.Router();
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY }); // Ensure to set this in .env
@@ -21,6 +23,8 @@ router.post('/tasks', protect, async (req, res) => {
   const { name, difficulty, deadline_days, hours } = req.body;
 
   try {
+    const userPref = await User.findById(req.user._id);
+
     const task = new Task({
       user: req.user._id,
       name,
@@ -28,6 +32,14 @@ router.post('/tasks', protect, async (req, res) => {
       deadline_days,
       hours: hours || 5
     });
+    
+    // Compute Priority Score
+    const dDays = task.deadline_days > 0 ? task.deadline_days : 1;
+    task.priority_score = (task.difficulty * task.hours) / dDays;
+    
+    // Generate Deterministic Schedule computationally
+    task.schedule = generateDeterministicSchedule(task, userPref.blockedTimes || []);
+
     const createdTask = await task.save();
     res.status(201).json(createdTask);
   } catch (err) {
@@ -94,6 +106,10 @@ router.post('/parse_task', protect, async (req, res) => {
       tips: parsedData.tips || []
     });
 
+    // Compute Priority Score
+    const dDays = task.deadline_days > 0 ? task.deadline_days : 1;
+    task.priority_score = (task.difficulty * task.hours) / dDays;
+
     const createdTask = await task.save();
     res.status(201).json(createdTask);
 
@@ -123,3 +139,26 @@ router.delete('/tasks/:id', protect, async (req, res) => {
 });
 
 module.exports = router;
+
+// Toggle activity complete status
+router.put('/tasks/:id/activity/:activityId', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    if (task.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
+
+    const activity = task.schedule.id(req.params.activityId);
+    if (!activity) return res.status(404).json({ message: 'Activity not found' });
+
+    activity.completed = !activity.completed;
+    
+    // Check if all activities are completed to mark task as completed
+    const allCompleted = task.schedule.every(act => act.completed);
+    task.completed = allCompleted;
+
+    await task.save();
+    res.json({ message: 'Activity status updated', task });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
