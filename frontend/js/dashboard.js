@@ -16,9 +16,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Chart instances
   let difficultyChart = null;
+  let currentLoadedTasks = [];
 
   // Load the dashboard data
   loadDashboard();
+
+  // Attach theme toggle listener to redraw chart
+  const themeToggle = document.getElementById('theme-toggle-btn');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      setTimeout(() => {
+        if (currentLoadedTasks.length > 0) renderCharts(currentLoadedTasks);
+      }, 50);
+    });
+  }
 
   // Handle AI Form Submit
   const aiForm = document.getElementById('ai-task-form');
@@ -206,6 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadDashboard() {
     try {
       const tasks = await api.tasks.getAll();
+      currentLoadedTasks = tasks;
       renderTasks(tasks);
       updateStats(tasks);
       renderCharts(tasks);
@@ -455,38 +467,60 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderCharts(tasks) {
     const ctx = document.getElementById('difficultyChart').getContext('2d');
     
-    // Group tasks by difficulty
-    const difficultyCounts = {1:0, 2:0, 3:0, 4:0, 5:0};
-    tasks.forEach(t => {
-      if(difficultyCounts[t.difficulty] !== undefined) {
-        difficultyCounts[t.difficulty]++;
-      }
-    });
+    // Dynamic styling based on current theme
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim() || '#f8fafc';
+    const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--glass-border').trim() || 'rgba(255, 255, 255, 0.1)';
 
     if (difficultyChart) {
       difficultyChart.destroy();
     }
 
     difficultyChart = new Chart(ctx, {
-      type: 'doughnut',
+      type: 'bar',
       data: {
-        labels: ['Very Easy', 'Easy', 'Medium', 'Hard', 'Very Hard'],
-        datasets: [{
-          data: Object.values(difficultyCounts),
-          backgroundColor: [
-            '#10b981', '#34d399', '#3b82f6', '#8b5cf6', '#ef4444'
-          ],
-          borderWidth: 0,
-          hoverOffset: 4
-        }]
+        labels: tasks.map(t => t.name),
+        datasets: [
+          {
+            label: 'Completed Sessions',
+            data: tasks.map(t => t.completed_hours || 0),
+            backgroundColor: '#10b981', // Success color
+            borderRadius: 4
+          },
+          {
+            label: 'Remaining Sessions',
+            data: tasks.map(t => Math.max(0, t.hours - (t.completed_hours || 0))),
+            backgroundColor: '#3b82f6', // Primary color
+            borderRadius: 4
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        scales: {
+          x: {
+            stacked: true,
+            ticks: { color: textColor },
+            grid: { color: gridColor, drawBorder: false }
+          },
+          y: {
+            stacked: true,
+            ticks: { color: textColor, stepSize: 1 },
+            grid: { color: gridColor, drawBorder: false }
+          }
+        },
         plugins: {
           legend: {
-            position: 'right',
-            labels: { color: '#f8fafc' }
+            position: 'top',
+            labels: { color: textColor, font: { weight: 'bold' } }
+          },
+          tooltip: {
+            callbacks: {
+              afterBody: function(context) {
+                const idx = context[0].dataIndex;
+                return '(Priority Score: ' + tasks[idx].priority_score.toFixed(1) + ')';
+              }
+            }
           }
         }
       }
