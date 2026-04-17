@@ -44,13 +44,24 @@ function generateDeterministicSchedule(tasks, blockedTimes = []) {
                 selectedTask.missed_tracking--;
             }
 
+            let activityDesc = "Complete 1 hour study block";
+            if (selectedTask.schedule && selectedTask.schedule.length > 0) {
+                let current_hour_index = selectedTask.hours - selectedTask.remaining_hours;
+                let activityIndex = Math.floor((current_hour_index / selectedTask.hours) * selectedTask.schedule.length);
+                if (activityIndex >= selectedTask.schedule.length) {
+                    activityIndex = selectedTask.schedule.length - 1;
+                }
+                activityDesc = selectedTask.schedule[activityIndex].activity;
+            }
+
             timeline.push({
                 date: dateStr,
                 day: dayOfWeek,
                 time: slot,
                 taskId: selectedTask._id,
                 taskName: selectedTask.name,
-                isRescheduled
+                isRescheduled,
+                activity: activityDesc
             });
             
             selectedTask.remaining_hours--;

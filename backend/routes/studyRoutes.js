@@ -16,7 +16,7 @@ const client = new Groq({ apiKey: process.env.GROQ_API_KEY }); // Ensure to set 
 // Get all tasks for logged in user
 router.get('/tasks', protect, async (req, res) => {
   try {
-    const tasks = await Task.find({ user: req.user._id }).sort({ createdAt: -1 });
+    const tasks = await Task.find({ user: req.user._id }).sort({ priority_score: -1 });
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -30,12 +30,60 @@ router.post('/tasks', protect, async (req, res) => {
   try {
     const userPref = await User.findById(req.user._id);
 
+    let schedule = [];
+    let tips = [];
+
+    // Attempt to generate a schedule and tips dynamically so "View Plan" works
+    try {
+      const prompt = `
+      The user is adding a study task manually with the following details: 
+      Subject: "${name}", Difficulty: ${difficulty || 3}/5, Deadline: ${deadline_days} days, Total Hours: ${hours || 5}.
+      Generate the following information, outputting strictly as a JSON object:
+      - "schedule": array of objects, providing a daily plan. Strictly generate EXACTLY as many objects as ${deadline_days} (one per day). Each object should have:
+          * "time": string (format as "Day 1", "Day 2", etc.)
+          * "activity": string (highly precise and in-depth breakdown of the specific concepts, sub-topics, or chapters to cover during this session block)
+      - "tips": array of strings, providing 3 specific study tips or tricks related to "${name}".
+      Output ONLY valid JSON, without any markdown formatting wrappers or additional text.
+      `;
+
+      const chatCompletion = await client.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: "You are a specialized AI designed to generate structured JSON data from task details. Always return valid JSON."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.2
+      });
+
+      let responseText = chatCompletion.choices[0].message.content.trim();
+      if (responseText.startsWith("\`\`\`json")) {
+        responseText = responseText.substring(7);
+      }
+      if (responseText.endsWith("\`\`\`")) {
+        responseText = responseText.substring(0, responseText.length - 3);
+      }
+      const parsedData = JSON.parse(responseText);
+      if (parsedData.schedule) schedule = parsedData.schedule;
+      if (parsedData.tips) tips = parsedData.tips;
+    } catch (aiError) {
+      console.warn("AI Plan generation failed for manual task:", aiError);
+    }
+
     const task = new Task({
       user: req.user._id,
       name,
       difficulty: difficulty || 3,
       deadline_days,
-      hours: hours || 5
+      hours: hours || 5,
+      schedule,
+      tips
     });
     
     // Compute Priority Score
@@ -66,7 +114,7 @@ router.post('/parse_task', protect, async (req, res) => {
   - "hours": integer (estimated total study hours required, assume 5 if not specified)
   - "schedule": array of objects, providing a daily plan. Strictly generate EXACTLY as many objects as "deadline_days". (e.g., if deadline_days is 5, generate exactly 5 objects). Each object should have:
       * "time": string (format as "Day 1", "Day 2", etc. up to the deadline day)
-      * "activity": string (detailed description of what to study or achieve on this exact day to meet the total hours requested)
+      * "activity": string (highly precise and in-depth breakdown of the specific concepts, sub-topics, or chapters to cover during this session block)
   - "tips": array of strings, providing 3 specific study tips or tricks related to this subject/task to help them prepare faster.
   Output ONLY valid JSON, without any markdown formatting wrappers or additional text.
   `;
