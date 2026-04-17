@@ -4,6 +4,11 @@ const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 const { Groq } = require('groq-sdk');
 const { generateDeterministicSchedule } = require('../utils/schedulerEngine');
+const multer = require('multer');
+const upload = multer();
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 const router = express.Router();
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY }); // Ensure to set this in .env
@@ -37,9 +42,6 @@ router.post('/tasks', protect, async (req, res) => {
     const dDays = task.deadline_days > 0 ? task.deadline_days : 1;
     task.priority_score = (task.difficulty * task.hours) / dDays;
     
-    // Generate Deterministic Schedule computationally
-    task.schedule = generateDeterministicSchedule(task, userPref.blockedTimes || []);
-
     const createdTask = await task.save();
     res.status(201).json(createdTask);
   } catch (err) {
@@ -62,9 +64,9 @@ router.post('/parse_task', protect, async (req, res) => {
   - "difficulty": integer from 1 to 5 (assume 3 if not specified)
   - "deadline_days": integer (number of days until the deadline, from today. Assume 7 if not specified)
   - "hours": integer (estimated total study hours required, assume 5 if not specified)
-  - "schedule": array of objects, containing a logical breakdown of study sessions fitting the hours and days. Each object should have:
-      * "time": string (e.g., "Day 1 - Morning", "Day 2 - Evening")
-      * "activity": string (detailed description of what exactly to study/do)
+  - "schedule": array of objects, providing a daily plan. Strictly generate EXACTLY as many objects as "deadline_days". (e.g., if deadline_days is 5, generate exactly 5 objects). Each object should have:
+      * "time": string (format as "Day 1", "Day 2", etc. up to the deadline day)
+      * "activity": string (detailed description of what to study or achieve on this exact day to meet the total hours requested)
   - "tips": array of strings, providing 3 specific study tips or tricks related to this subject/task to help them prepare faster.
   Output ONLY valid JSON, without any markdown formatting wrappers or additional text.
   `;
@@ -118,6 +120,31 @@ router.post('/parse_task', protect, async (req, res) => {
   }
 });
 
+// Transcribe Audio
+router.post('/transcribe', protect, upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No audio file provided' });
+    }
+
+    const tempFilePath = path.join(os.tmpdir(), `audio-${Date.now()}.webm`);
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+
+    const transcription = await client.audio.transcriptions.create({
+      file: fs.createReadStream(tempFilePath),
+      model: "whisper-large-v3",
+      response_format: "json",
+    });
+
+    // Cleanup
+    fs.unlinkSync(tempFilePath);
+
+    res.json({ text: transcription.text });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to transcribe audio', error: error.message });
+  }
+});
+
 // Delete task
 router.delete('/tasks/:id', protect, async (req, res) => {
   try {
@@ -140,7 +167,58 @@ router.delete('/tasks/:id', protect, async (req, res) => {
 
 module.exports = router;
 
-// Toggle activity complete status
+// Global algorithmic schedule
+router.get('/schedule', protect, async (req, res) => {
+  try {
+    const tasks = await Task.find({ user: req.user._id });
+    const userPref = await User.findById(req.user._id);
+    
+    // Update priorities dynamically
+    for (let task of tasks) {
+      const dDays = task.deadline_days > 0 ? task.deadline_days : 1;
+      let basePriority = (task.difficulty * task.hours) / dDays;
+      task.priority_score = basePriority + (task.missed_sessions * 1.5);
+      await task.save();
+    }
+    
+    const timeline = generateDeterministicSchedule(tasks, userPref.blockedTimes || []);
+    res.json(timeline);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Mark session missed
+router.post('/tasks/:id/miss', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    if (task.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
+
+    task.missed_sessions += 1;
+    await task.save();
+    res.json({ message: 'Session missed, priority updated', task });
+  } catch(err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Mark session complete
+router.post('/tasks/:id/complete', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    if (task.user.toString() !== req.user._id.toString()) return res.status(401).json({ message: 'Not authorized' });
+
+    task.completed_hours += 1;
+    await task.save();
+    res.json({ message: 'Session completed', task });
+  } catch(err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Toggle Activity Complete Status
 router.put('/tasks/:id/activity/:activityId', protect, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -150,15 +228,26 @@ router.put('/tasks/:id/activity/:activityId', protect, async (req, res) => {
     const activity = task.schedule.id(req.params.activityId);
     if (!activity) return res.status(404).json({ message: 'Activity not found' });
 
+    // Toggle completed state
     activity.completed = !activity.completed;
+
+    // Recalculate completed tracking
+    const totalAct = task.schedule.length;
+    const compAct = task.schedule.filter(a => a.completed).length;
     
-    // Check if all activities are completed to mark task as completed
-    const allCompleted = task.schedule.every(act => act.completed);
-    task.completed = allCompleted;
+    if (totalAct > 0) {
+      // Intelligently map progress to completed hours
+      task.completed_hours = Math.round(task.hours * (compAct / totalAct));
+    }
+
+    // Recompute priority based on remaining effort
+    const dDays = task.deadline_days > 0 ? task.deadline_days : 1;
+    let basePriority = (task.difficulty * task.hours) / dDays;
+    task.priority_score = basePriority + (task.missed_sessions * 1.5);
 
     await task.save();
-    res.json({ message: 'Activity status updated', task });
-  } catch (err) {
+    res.json({ message: 'Activity toggled', task });
+  } catch(err) {
     res.status(500).json({ message: err.message });
   }
 });

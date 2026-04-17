@@ -49,6 +49,58 @@ document.addEventListener('DOMContentLoaded', () => {
       aiBtn.disabled = false;
     }
   });
+
+  // Voice Search / Dictation Logic
+  const voiceBtn = document.getElementById('voice-record-btn');
+  let mediaRecorder;
+  let audioChunks = [];
+  let isRecording = false;
+
+  if (voiceBtn) {
+    voiceBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            stream.getTracks().forEach(t => t.stop()); // Stop mic
+            
+            aiInput.placeholder = 'Transcribing voice...';
+            voiceBtn.style.color = 'var(--text-muted)';
+            voiceBtn.textContent = '🎤';
+
+            try {
+              const res = await api.tasks.transcribeAudio(audioBlob);
+              aiInput.value = (aiInput.value ? aiInput.value + ' ' : '') + res.text;
+            } catch (err) {
+              console.error(err);
+              aiError.textContent = 'Failed to transcribe audio. Please try again.';
+            } finally {
+              aiInput.placeholder = 'e.g. I need to study Math for 5 hours. The difficulty is 4 out of 5 and my deadline is in 7 days.';
+            }
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          voiceBtn.style.color = 'var(--danger)';
+          voiceBtn.textContent = '⏹️';
+        } catch (err) {
+          console.error('Microphone access disabled', err);
+          aiError.textContent = 'Microphone access denied or unavailable.';
+        }
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+      }
+    });
+  }
   
   // Settings Modal Logic
   const settingsBtn = document.getElementById('settings-btn');
@@ -151,9 +203,99 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTasks(tasks);
       updateStats(tasks);
       renderCharts(tasks);
+      await loadSchedule();
     } catch (error) {
       console.error('Failed to load dashboard', error);
     }
+  }
+
+  async function loadSchedule() {
+    try {
+      document.getElementById('dynamic-schedule-list').innerHTML = '<div class="text-muted text-center py-4">Generating schedule...</div>';
+      const schedule = await api.tasks.getSchedule();
+      renderSchedule(schedule);
+    } catch (error) {
+      console.error('Failed to load schedule', error);
+      document.getElementById('dynamic-schedule-list').innerHTML = '<div class="text-danger text-center py-4">Failed to load schedule.</div>';
+    }
+  }
+
+  function renderSchedule(schedule) {
+    const list = document.getElementById('dynamic-schedule-list');
+    list.innerHTML = '';
+    
+    if (!schedule || schedule.length === 0) {
+      list.innerHTML = '<div class="text-muted text-center py-4">No tasks to schedule.</div>';
+      return;
+    }
+
+    // Group by date
+    const grouped = {};
+    schedule.forEach(slot => {
+      if (!grouped[slot.date]) grouped[slot.date] = { day: slot.day, slots: [] };
+      grouped[slot.date].slots.push(slot);
+    });
+
+    for (const [date, data] of Object.entries(grouped)) {
+      const daySection = document.createElement('div');
+      daySection.className = 'schedule-day';
+      daySection.style.marginBottom = '20px';
+      
+      daySection.innerHTML = `
+        <h3 style="margin-bottom: 10px; color: var(--primary); font-size: 1.1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 5px;">${data.day}, ${date}</h3>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${data.slots.map(s => `
+            <div class="schedule-slot" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 8px; background: ${s.isRescheduled ? 'rgba(239, 68, 68, 0.15)' : 'var(--glass-bg)'}; border-left: 4px solid ${s.isRescheduled ? 'var(--danger)' : 'var(--primary)'}; border-top: 1px solid var(--glass-border); border-right: 1px solid var(--glass-border); border-bottom: 1px solid var(--glass-border); transition: transform 0.2s;">
+              <div>
+                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;">
+                  ${s.time} <span style="color: var(--text-muted); font-weight: normal; margin: 0 5px;">|</span> ${s.taskName}
+                  ${s.isRescheduled ? '<span style="font-size: 0.7rem; background: var(--danger); color: white; padding: 2px 6px; border-radius: 12px; margin-left: 8px; vertical-align: middle; font-weight: bold;">Rescheduled</span>' : ''}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">Session Goal: Complete 1 hour study block</div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn-complete-session btn-outline" data-id="${s.taskId}" style="font-size: 0.8rem; padding: 6px 10px; border-color: var(--success); color: var(--success); cursor: pointer;">Complete</button>
+                <button class="btn-miss-session btn-outline" data-id="${s.taskId}" style="font-size: 0.8rem; padding: 6px 10px; border-color: var(--danger); color: var(--danger); cursor: pointer;">Missed</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      list.appendChild(daySection);
+    }
+    
+    // Attach handlers
+    document.querySelectorAll('.btn-complete-session').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        e.currentTarget.disabled = true;
+        e.currentTarget.textContent = '...';
+        try {
+          await api.tasks.markComplete(id);
+          await loadDashboard(); // Re-render everything to update schedule dynamically
+        } catch (err) {
+          console.error(err);
+          e.currentTarget.disabled = false;
+          e.currentTarget.textContent = 'Complete';
+        }
+      });
+    });
+
+    document.querySelectorAll('.btn-miss-session').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        e.currentTarget.disabled = true;
+        e.currentTarget.textContent = '...';
+        try {
+          await api.tasks.markMissed(id);
+          await loadDashboard(); // Re-render everything to update schedule dynamically
+        } catch (err) {
+          console.error(err);
+          e.currentTarget.disabled = false;
+          e.currentTarget.textContent = 'Missed';
+        }
+      });
+    });
   }
 
   function renderTasks(tasks) {
@@ -175,21 +317,22 @@ document.addEventListener('DOMContentLoaded', () => {
       // Build Schedule HTML
       let scheduleHtml = '';
       if (task.schedule && task.schedule.length > 0) {
-        const progress = Math.round((task.schedule.filter(s => s.completed).length / task.schedule.length) * 100) || 0;
+        const progress = task.hours > 0 ? Math.round(((task.completed_hours || 0) / task.hours) * 100) : 0;
+        const cappedProgress = progress > 100 ? 100 : progress;
         scheduleHtml = `
           <div class="task-schedule">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <h5 style="color: var(--primary); font-size: 0.95rem; margin: 0;">📅 Schedule & Progress</h5>
-              <span style="font-size: 0.8rem; background: var(--glass-bg); padding: 3px 8px; border-radius: 12px; color: ${progress === 100 ? 'var(--success)' : 'var(--text-main)'}">${progress}% Completed</span>
+              <h5 style="color: var(--primary); font-size: 0.95rem; margin: 0;">📅 Daily Plan (up to Deadline)</h5>
+              <span style="font-size: 0.8rem; background: var(--glass-bg); padding: 3px 8px; border-radius: 12px; color: ${cappedProgress === 100 ? 'var(--success)' : 'var(--text-main)'}">${cappedProgress}% Completed</span>
             </div>
             <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-bottom: 12px; overflow: hidden;">
-              <div style="height: 100%; width: ${progress}%; background: ${progress === 100 ? 'var(--success)' : 'var(--primary)'}; transition: width 0.3s ease;"></div>
+              <div style="height: 100%; width: ${cappedProgress}%; background: ${cappedProgress === 100 ? 'var(--success)' : 'var(--primary)'}; transition: width 0.3s ease;"></div>
             </div>
             <ul style="list-style: none; padding-left: 0; margin-bottom: 15px; font-size: 0.9rem;">
               ${task.schedule.map(s => `
-                <li style="margin-bottom: 5px; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 6px; display: flex; align-items: center; gap: 10px; opacity: ${s.completed ? '0.6' : '1'}; transition: opacity 0.2s ease;">
-                  <input type="checkbox" class="activity-checkbox" data-task-id="${task._id}" data-activity-id="${s._id}" ${s.completed ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px; flex-shrink: 0;">
-                  <span style="flex:1; text-decoration: ${s.completed ? 'line-through' : 'none'};"><strong>${s.time}:</strong> ${s.activity}</span>
+                <li style="margin-bottom: 5px; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 6px; display: flex; flex-direction: column; gap: 4px;">
+                  <strong style="color: var(--secondary);">${s.time}</strong>
+                  <span style="color: var(--text-main);">${s.activity}</span>
                 </li>
               `).join('')}
             </ul>
@@ -257,20 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Checkbox handlers
-    document.querySelectorAll('.activity-checkbox').forEach(box => {
-      box.addEventListener('change', async (e) => {
-        const taskId = e.target.getAttribute('data-task-id');
-        const activityId = e.target.getAttribute('data-activity-id');
-        try {
-          await api.tasks.toggleActivity(taskId, activityId);
-          await loadDashboard();
-        } catch (error) {
-          console.error('Failed to toggle activity', error);
-          e.target.checked = !e.target.checked;
-        }
-      });
-    });
+
 
     // Delete handlers
     document.querySelectorAll('.btn-delete').forEach(btn => {
@@ -288,6 +418,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateStats(tasks) {
     document.getElementById('stat-total').textContent = tasks.length;
+    
+    const remainingTasks = tasks.filter(t => t.hours > (t.completed_hours || 0)).length;
+    if (document.getElementById('stat-remaining')) document.getElementById('stat-remaining').textContent = remainingTasks;
+
     const totalHours = tasks.reduce((sum, task) => sum + task.hours, 0);
     document.getElementById('stat-hours').textContent = totalHours;
   }

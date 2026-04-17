@@ -11,6 +11,19 @@
   --text-muted: #94a3b8;
   --danger: #ef4444;
   --success: #10b981;
+  --input-bg: rgba(0, 0, 0, 0.2);
+  --input-focus-bg: rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="light"] {
+  --bg-dark: #f8fafc;
+  --bg-darker: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --input-bg: rgba(241, 245, 249, 0.8);
+  --input-focus-bg: rgba(226, 232, 240, 0.8);
 }
 
 * {
@@ -26,6 +39,7 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   position: relative;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Background Blobs for Glassmorphism Effect */
@@ -152,18 +166,18 @@ input, textarea {
   width: 100%;
   padding: 12px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--input-bg);
   border: 1px solid var(--glass-border);
   color: var(--text-main);
   font-family: inherit;
   font-size: 1rem;
-  transition: border-color 0.3s ease;
+  transition: border-color 0.3s ease, background 0.3s ease, color 0.3s ease;
 }
 
 input:focus, textarea:focus {
   outline: none;
   border-color: var(--primary);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--input-focus-bg);
 }
 
 /* Landing Page Specific */

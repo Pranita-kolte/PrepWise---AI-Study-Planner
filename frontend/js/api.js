@@ -53,6 +53,7 @@ const api = {
   },
   tasks: {
     getAll: () => fetchWrapper('/study/tasks'),
+    getSchedule: () => fetchWrapper('/study/schedule'),
     create: (taskData) => fetchWrapper('/study/tasks', {
       method: 'POST',
       body: JSON.stringify(taskData)
@@ -64,8 +65,31 @@ const api = {
       method: 'POST',
       body: JSON.stringify({ text })
     }),
+    markMissed: (taskId) => fetchWrapper(`/study/tasks/${taskId}/miss`, {
+      method: 'POST'
+    }),
+    markComplete: (taskId) => fetchWrapper(`/study/tasks/${taskId}/complete`, {
+      method: 'POST'
+    }),
     toggleActivity: (taskId, activityId) => fetchWrapper(`/study/tasks/${taskId}/activity/${activityId}`, {
       method: 'PUT'
-    })
+    }),
+    transcribeAudio: async (audioBlob) => {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'audio.webm');
+      
+      const response = await fetch(`${API_URL}/study/transcribe`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      return data;
+    }
   }
 };

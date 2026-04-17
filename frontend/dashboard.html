@@ -16,6 +16,7 @@
     <div class="brand">PrepWise</div>
     <div class="user-controls">
       <span id="user-greeting">Welcome, User</span>
+      <button id="theme-toggle-btn" style="margin-right: 15px; font-size: 1.5rem; background: transparent; border: none; cursor: pointer; color: var(--text-main); transition: transform 0.2s;">🌙</button>
       <button id="settings-btn" class="btn btn-outline" style="margin-right: 10px; font-size: 0.9em; padding: 6px 12px;">⚙ Settings</button>
       <button id="logout-btn" class="btn btn-outline" style="font-size: 0.9em; padding: 6px 12px;">Logout</button>
     </div>
@@ -28,7 +29,10 @@
       <h2>Add New Study Task</h2>
       <p class="text-muted">Use natural language.</p>
       <form id="ai-task-form">
-        <textarea id="ai-task-input" rows="4" placeholder="e.g. I need to study Math for 5 hours. The difficulty is 4 out of 5 and my deadline is in 7 days." required></textarea>
+        <div style="position: relative; margin-bottom: 10px;">
+          <textarea id="ai-task-input" rows="4" placeholder="e.g. I need to study Math for 5 hours. The difficulty is 4 out of 5 and my deadline is in 7 days." required style="width: 100%; padding-right: 40px;"></textarea>
+          <button type="button" id="voice-record-btn" style="position: absolute; bottom: 10px; right: 10px; background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted); transition: color 0.3s;" title="Hold to record voice">🎤</button>
+        </div>
         <button type="submit" class="btn btn-secondary w-full" id="ai-task-submit">Generate Task (AI)</button>
       </form>
       <div id="ai-task-error" class="error-msg text-sm mt-2"></div>
@@ -68,6 +72,10 @@
           <p id="stat-total" class="stat-value">0</p>
         </div>
         <div class="stat-card glass-panel">
+          <h3>Remaining Tasks</h3>
+          <p id="stat-remaining" class="stat-value">0</p>
+        </div>
+        <div class="stat-card glass-panel">
           <h3>Hours Planned</h3>
           <p id="stat-hours" class="stat-value">0</p>
         </div>
@@ -80,8 +88,15 @@
         </div>
       </div>
 
+      <div class="schedule-section glass-panel" style="margin-bottom: 20px;">
+        <h2>Dynamic 30-Day Schedule</h2>
+        <div id="dynamic-schedule-list" class="schedule-list">
+          <div class="text-muted text-center py-4">Generating schedule...</div>
+        </div>
+      </div>
+
       <div class="tasks-section glass-panel">
-        <h2>Upcoming Deadlines & Priorities</h2>
+        <h2>Subjects & Goals</h2>
         <div id="tasks-list" class="tasks-list">
           <!-- Tasks dynamically populated here -->
           <div class="text-muted text-center py-4">Loading tasks...</div>
@@ -133,6 +148,7 @@
     </div>
   </div>
 
+  <script src="./js/theme.js"></script>
   <script src="./js/api.js"></script>
   <script src="./js/dashboard.js"></script>
 </body>

@@ -1,7 +1,6 @@
 // Deterministic Algorithmic Scheduling Engine
 
 function getAvailableSlots(dayOfWeek, blockedTimes) {
-    // Assume standard waking hours 08:00 to 22:00 (14 available hours)
     let freeSlots = [];
     for(let hour = 8; hour < 22; hour++) {
         let isBlocked = false;
@@ -17,43 +16,49 @@ function getAvailableSlots(dayOfWeek, blockedTimes) {
     return freeSlots;
 }
 
-function generateDeterministicSchedule(task, blockedTimes = []) {
-    const schedule = [];
-    let remainingHours = task.hours;
+function generateDeterministicSchedule(tasks, blockedTimes = []) {
+    // 1. Sort tasks by priority
+    const activeTasks = tasks.map(t => ({
+        ...t.toObject(),
+        remaining_hours: t.hours - (t.completed_hours || 0),
+        missed_tracking: t.missed_sessions || 0
+    })).filter(t => t.remaining_hours > 0).sort((a, b) => b.priority_score - a.priority_score);
+
+    const timeline = [];
     let currentDay = new Date();
     
-    let daysIterated = 0;
-    // Iterate up to deadline
-    while(remainingHours > 0 && daysIterated <= task.deadline_days) {
+    // Generate up to 30 days
+    for(let i=0; i<30; i++) {
         const dayOfWeek = currentDay.toLocaleDateString('en-US', {weekday: 'long'});
+        const dateStr = currentDay.toLocaleDateString('en-US');
         const freeSlots = getAvailableSlots(dayOfWeek, blockedTimes);
         
         for (let slot of freeSlots) {
-            if (remainingHours <= 0) break;
-            schedule.push({
-                time: `Day ${daysIterated + 1} (${dayOfWeek}) [${slot}]`,
-                activity: `Algorithmic Study Block: ${task.name}`,
-                completed: false
-            });
-            remainingHours--;
-        }
-        
-        currentDay.setDate(currentDay.getDate() + 1);
-        daysIterated++;
-    }
+            // Find highest priority task that still needs hours
+            let selectedTask = activeTasks.find(t => t.remaining_hours > 0);
+            
+            if (!selectedTask) break; // All tasks complete!
+            
+            let isRescheduled = selectedTask.missed_tracking > 0;
+            if (isRescheduled) {
+                selectedTask.missed_tracking--;
+            }
 
-    // Force fit any remaining hours if the schedule was too blocked
-    if (remainingHours > 0) {
-        for(let i=0; i<remainingHours; i++) {
-            schedule.push({
-                time: `Overtime Block ${i+1} (Post Deadline Limit)`,
-                activity: `Mandatory Catchup: ${task.name}`,
-                completed: false
+            timeline.push({
+                date: dateStr,
+                day: dayOfWeek,
+                time: slot,
+                taskId: selectedTask._id,
+                taskName: selectedTask.name,
+                isRescheduled
             });
+            
+            selectedTask.remaining_hours--;
         }
+        currentDay.setDate(currentDay.getDate() + 1);
     }
     
-    return schedule;
+    return timeline;
 }
 
 module.exports = { generateDeterministicSchedule };
