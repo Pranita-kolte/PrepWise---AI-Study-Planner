@@ -44,7 +44,7 @@
       <form id="manual-task-form">
         <div class="form-group" style="margin-bottom: 15px;">
           <label style="display:block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.9em;">Subject / Task Name</label>
-          <input type="text" id="manual-name" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff;" required>
+          <input type="text" id="manual-name" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border);" required>
         </div>
         <div class="form-group" style="margin-bottom: 15px;">
           <label style="display:block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.9em;">Difficulty (1-5)</label>
@@ -53,18 +53,27 @@
         </div>
         <div class="form-group" style="margin-bottom: 15px;">
           <label style="display:block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.9em;">Deadline Date</label>
-          <input type="date" id="manual-deadline" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff;" required>
+          <input type="date" id="manual-deadline" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border);" required>
         </div>
         <div class="form-group" style="margin-bottom: 15px;">
           <label style="display:block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.9em;">Estimated Study Hours</label>
-          <input type="number" id="manual-hours" min="1" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff;" required>
+          <input type="number" id="manual-hours" min="1" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border);" required>
         </div>
         <button type="submit" class="btn btn-primary w-full" id="manual-task-submit" style="background: var(--primary); padding: 10px; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">Add Subject</button>
       </form>
+
+      <hr style="border-color: var(--glass-border); margin: 20px 0;">
+      
+      <h2>Completed Today</h2>
+      <div id="completed-today-list" style="margin-bottom: 20px; font-size: 0.9em; display: flex; flex-direction: column; gap: 8px;">
+        <div class="text-muted text-sm mt-2">No tasks completed yet.</div>
+      </div>
     </aside>
 
     <!-- Main Dashboard -->
     <main class="dashboard-content">
+      
+      <div id="deadline-reminders" style="display: none; margin-bottom: 10px;"></div>
       
       <div class="stats-grid">
         <div class="stat-card glass-panel">
@@ -122,26 +131,26 @@
       </div>
       
       <form id="add-block-form" style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <select id="block-type" style="padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff; flex: 1;">
-          <option value="Class" style="color:#000;">Class</option>
-          <option value="Sleep" style="color:#000;">Sleep</option>
-          <option value="Work" style="color:#000;">Work</option>
-          <option value="Other" style="color:#000;">Other</option>
+        <select id="block-type" style="padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border); background: var(--input-bg); color: var(--text-main); flex: 1;">
+          <option value="Class">Class</option>
+          <option value="Sleep">Sleep</option>
+          <option value="Work">Work</option>
+          <option value="Other">Other</option>
         </select>
-        <select id="block-day" style="padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff; flex: 1;">
-          <option value="Everyday" style="color:#000;">Everyday</option>
-          <option value="Monday" style="color:#000;">Monday</option>
-          <option value="Tuesday" style="color:#000;">Tuesday</option>
-          <option value="Wednesday" style="color:#000;">Wednesday</option>
-          <option value="Thursday" style="color:#000;">Thursday</option>
-          <option value="Friday" style="color:#000;">Friday</option>
-          <option value="Saturday" style="color:#000;">Saturday</option>
-          <option value="Sunday" style="color:#000;">Sunday</option>
+        <select id="block-day" style="padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border); background: var(--input-bg); color: var(--text-main); flex: 1;">
+          <option value="Everyday">Everyday</option>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+          <option value="Saturday">Saturday</option>
+          <option value="Sunday">Sunday</option>
         </select>
         <div style="display: flex; gap: 5px; flex: 2; align-items: center;">
-          <input type="time" id="block-start" required style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff;">
+          <input type="time" id="block-start" required style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border);">
           <span style="color: var(--text-muted); font-size: 0.9em;">to</span>
-          <input type="time" id="block-end" required style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: #fff;">
+          <input type="time" id="block-end" required style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--glass-border);">
         </div>
         <button type="submit" class="btn btn-secondary w-full" style="margin-top: 10px; background: var(--secondary); padding: 8px; border-radius: 6px; border: none; color: #fff; cursor: pointer; font-weight: 600;">Add Blocked Time</button>
       </form>

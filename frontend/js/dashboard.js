@@ -125,7 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const idx = e.target.getAttribute('data-index');
         currentBlockedTimes.splice(idx, 1);
         renderBlockedTimes();
-        await api.user.updateSettings({ blockedTimes: currentBlockedTimes });
+        try {
+            await api.user.updateSettings({ blockedTimes: currentBlockedTimes });
+            await loadSchedule();
+        } catch(err) { console.error(err); }
       });
     });
   };
@@ -150,7 +153,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     currentBlockedTimes.push({ type, day, start, end });
     renderBlockedTimes();
-    try { await api.user.updateSettings({ blockedTimes: currentBlockedTimes }); } 
+    try { 
+        await api.user.updateSettings({ blockedTimes: currentBlockedTimes }); 
+        await loadSchedule();
+    } 
     catch(err) { console.error(err); }
   });
 
@@ -203,6 +209,8 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTasks(tasks);
       updateStats(tasks);
       renderCharts(tasks);
+      checkDeadlines(tasks);
+      loadCompletedTasks();
       await loadSchedule();
     } catch (error) {
       console.error('Failed to load dashboard', error);
@@ -248,13 +256,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="schedule-slot" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 8px; background: ${s.isRescheduled ? 'rgba(239, 68, 68, 0.15)' : 'var(--glass-bg)'}; border-left: 4px solid ${s.isRescheduled ? 'var(--danger)' : 'var(--primary)'}; border-top: 1px solid var(--glass-border); border-right: 1px solid var(--glass-border); border-bottom: 1px solid var(--glass-border); transition: transform 0.2s;">
               <div>
                 <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;">
-                  ${s.time} <span style="color: var(--text-muted); font-weight: normal; margin: 0 5px;">|</span> ${s.taskName}
+                  ${s.time} <span style="color: var(--text-muted); font-weight: normal; margin: 0 5px;">|</span> <span class="task-name-span">${s.taskName}</span>
                   ${s.isRescheduled ? '<span style="font-size: 0.7rem; background: var(--danger); color: white; padding: 2px 6px; border-radius: 12px; margin-left: 8px; vertical-align: middle; font-weight: bold;">Rescheduled</span>' : ''}
                 </div>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">Session Goal: Complete 1 hour study block</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">Session Goal: ${s.activity || 'Complete 1 hour study block'}</div>
               </div>
               <div style="display: flex; gap: 8px;">
-                <button class="btn-complete-session btn-outline" data-id="${s.taskId}" style="font-size: 0.8rem; padding: 6px 10px; border-color: var(--success); color: var(--success); cursor: pointer;">Complete</button>
+                <button class="btn-complete-session btn-outline" data-id="${s.taskId}" data-name="${s.taskName}" style="font-size: 0.8rem; padding: 6px 10px; border-color: var(--success); color: var(--success); cursor: pointer;">Complete</button>
                 <button class="btn-miss-session btn-outline" data-id="${s.taskId}" style="font-size: 0.8rem; padding: 6px 10px; border-color: var(--danger); color: var(--danger); cursor: pointer;">Missed</button>
               </div>
             </div>
@@ -268,10 +276,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.btn-complete-session').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-id');
+        const name = e.currentTarget.getAttribute('data-name');
         e.currentTarget.disabled = true;
         e.currentTarget.textContent = '...';
         try {
           await api.tasks.markComplete(id);
+          
+          // Local history for completed today panel
+          const todayStr = new Date().toLocaleDateString('en-US');
+          let history = JSON.parse(localStorage.getItem('completed_history') || '[]');
+          history.push({ taskId: id, taskName: name, date: todayStr });
+          localStorage.setItem('completed_history', JSON.stringify(history));
+
           await loadDashboard(); // Re-render everything to update schedule dynamically
         } catch (err) {
           console.error(err);
@@ -417,13 +433,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateStats(tasks) {
-    document.getElementById('stat-total').textContent = tasks.length;
+    // Total sub-tasks/sessions across all subjects
+    const totalTasks = tasks.reduce((sum, task) => sum + task.hours, 0);
+    document.getElementById('stat-total').textContent = totalTasks;
     
-    const remainingTasks = tasks.filter(t => t.hours > (t.completed_hours || 0)).length;
+    // Remaining sub-tasks/sessions
+    const remainingTasks = tasks.reduce((sum, task) => {
+        const left = task.hours - (task.completed_hours || 0);
+        return sum + (left > 0 ? left : 0);
+    }, 0);
     if (document.getElementById('stat-remaining')) document.getElementById('stat-remaining').textContent = remainingTasks;
 
-    const totalHours = tasks.reduce((sum, task) => sum + task.hours, 0);
-    document.getElementById('stat-hours').textContent = totalHours;
+    // Repurpose the hours card to show Total Subjects
+    if (document.getElementById('stat-hours')) {
+        const hoursCardTitle = document.getElementById('stat-hours').parentElement.querySelector('h3');
+        if (hoursCardTitle) hoursCardTitle.textContent = "Total Subjects";
+        document.getElementById('stat-hours').textContent = tasks.length;
+    }
   }
 
   function renderCharts(tasks) {
@@ -465,5 +491,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     });
+  }
+
+  function checkDeadlines(tasks) {
+    // Only tasks not yet fully completed
+    const approaching = tasks.filter(t => t.deadline_days <= 3 && t.hours > (t.completed_hours || 0));
+    let container = document.getElementById('deadline-reminders');
+    if (!container) return;
+    
+    if (approaching.length > 0) {
+      container.style.display = 'block';
+      container.innerHTML = `<h3 style="color: var(--danger); font-size: 1.1rem; margin-bottom: 10px;">⚠️ Upcoming Deadlines</h3>` + approaching.map(t => `
+        <div class="glass-panel" style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.4); padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: var(--text-main); font-size: 0.95rem;">${t.name}</strong> 
+          <span style="color: var(--danger); font-weight: bold; font-size: 0.9rem;">Deadline in ${t.deadline_days} days!</span>
+        </div>
+      `).join('');
+    } else {
+      container.style.display = 'none';
+      container.innerHTML = '';
+    }
+  }
+
+  function loadCompletedTasks() {
+    const todayStr = new Date().toLocaleDateString('en-US');
+    let history = JSON.parse(localStorage.getItem('completed_history') || '[]');
+    let todaysTasks = history.filter(h => h.date === todayStr);
+
+    let list = document.getElementById('completed-today-list');
+    if (!list) return;
+
+    if (todaysTasks.length === 0) {
+      list.innerHTML = '<div class="text-muted text-sm mt-2">No tasks completed yet.</div>';
+    } else {
+      list.innerHTML = todaysTasks.map(t => `
+        <div style="padding: 10px; background: rgba(16, 185, 129, 0.1); border-left: 3px solid var(--success); border-radius: 6px; color: var(--text-main);">
+          ✅ <strong>${t.taskName}</strong> - 1 Hr
+        </div>
+      `).join('');
+    }
   }
 });
